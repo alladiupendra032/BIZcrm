@@ -182,13 +182,15 @@ export function Sidebar() {
       </div>
 
       {/* Mobile Hamburger Button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-3 left-3 z-[300] p-2 rounded-xl bg-slate-900/80 backdrop-blur-md border border-white/12 text-white hover:bg-white/10 transition-all"
-        aria-label="Open navigation menu"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
+      {!mobileOpen && (
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="lg:hidden fixed bottom-6 right-6 z-[300] w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_8px_30px_rgba(99,102,241,0.5)] border border-white/20 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      )}
 
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>

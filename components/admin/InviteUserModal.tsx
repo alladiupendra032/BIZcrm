@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, UserCheck, Send, Clock } from 'lucide-react'
+import { X, Mail, UserCheck, Send, Clock, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -144,6 +144,17 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
                     </Button>
                   </div>
                 </form>
+
+                {/* Resend Verification Notice (Explain why users might not get mail) */}
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Resend Security Note</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                    <span className="text-amber-200/80">Are users not receiving emails?</span> By default, Resend only sends to your own address. To invite others, you must verify your domain or use Hostinger SMTP.
+                  </p>
+                </div>
 
                 {/* Pending invites list */}
                 {pendingInvites.length > 0 && (

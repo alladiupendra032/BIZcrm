@@ -161,11 +161,11 @@ export function TopBar() {
   return (
     <>
       <header
-        className="flex items-center gap-3 px-6 py-3 border-b border-white/8 flex-shrink-0 relative z-50"
+        className="flex items-center gap-3 px-6 py-3 border-b border-white/8 flex-shrink-0 relative z-[100]"
         style={{
-          background: 'rgba(11, 14, 20, 0.8)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
+          background: 'rgba(11, 14, 20, 0.85)',
+          backdropFilter: 'blur(30px)',
+          WebkitBackdropFilter: 'blur(30px)',
         }}
       >
         {/* ── Global Search Pill ── */}
