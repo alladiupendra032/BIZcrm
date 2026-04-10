@@ -90,7 +90,7 @@ export default function IntegrationsPage() {
         <div className="text-2xl">🚀</div>
         <div>
           <p className="text-sm font-medium text-indigo-300">Integrations are coming in Q3 2026</p>
-          <p className="text-xs text-slate-500 mt-0.5">Our team is actively building these connections. You'll be notified when they're ready.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Our team is actively building these connections. You&apos;ll be notified when they&apos;re ready.</p>
         </div>
         <span className="ml-auto flex-shrink-0 text-xs bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 px-2.5 py-1 rounded-full font-medium">
           Coming Soon

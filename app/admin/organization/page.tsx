@@ -148,7 +148,7 @@ export default function OrganizationSettingsPage() {
             <h2 className="text-lg font-semibold text-white">Billing & Subscription</h2>
           </div>
           <p className="text-sm text-slate-400 mb-6 max-w-lg text-balance">
-            Soon you'll be able to manage your subscription, view past invoices, and upgrade your plan directly from this dashboard.
+            Soon you&apos;ll be able to manage your subscription, view past invoices, and upgrade your plan directly from this dashboard.
           </p>
           
           <Button variant="secondary" size="sm" disabled>

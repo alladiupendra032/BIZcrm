@@ -64,7 +64,7 @@ export default function AiPage() {
             </div>
             <p className="text-sm text-slate-400 mt-1.5 leading-relaxed max-w-lg">
               BizCRM is building intelligent AI capabilities directly into your workflow — no external tools required.
-              Below is a preview of what's coming.
+              Below is a preview of what&apos;s coming.
             </p>
           </div>
         </div>

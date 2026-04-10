@@ -228,7 +228,7 @@ export default function TasksPage() {
               <CheckSquare className="w-6 h-6 text-amber-400" />
               Tasks
             </h1>
-            <p className="text-slate-400 text-sm mt-1">Manage and track your team's work.</p>
+            <p className="text-slate-400 text-sm mt-1">Manage and track your team&apos;s work.</p>
           </div>
           <Button
             variant="primary"

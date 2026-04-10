@@ -137,7 +137,7 @@ export default function AcceptInvitePage() {
                   </div>
                   <h1 className="text-2xl font-bold text-white mb-2">Setting up your account…</h1>
                   <p className="text-slate-400 text-sm leading-relaxed">
-                    We're verifying your invite link.<br />This will only take a moment.
+                    We&apos;re verifying your invite link.<br />This will only take a moment.
                   </p>
 
                   {/* Animated dots */}
