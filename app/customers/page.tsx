@@ -20,7 +20,7 @@ import { CustomerDrawer } from '@/components/customers/CustomerDrawer'
 
 const STATUS_OPTIONS = ['All', 'Lead', 'Active', 'Closed']
 
-export default function CustomersPage() {
+function CustomersPageContent() {
   const { user, role, loading: userLoading } = useUser()
   const { showToast } = useToast()
   const router = useRouter()
@@ -296,5 +296,13 @@ export default function CustomersPage() {
       </Modal>
 
     </DashboardLayout>
+  )
+}
+
+export default function CustomersPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <CustomersPageContent />
+    </React.Suspense>
   )
 }

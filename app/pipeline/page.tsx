@@ -23,7 +23,7 @@ import { Customer } from '@/components/customers/CustomerTable'
 
 type ViewMode = 'kanban' | 'list'
 
-export default function PipelinePage() {
+function PipelinePageContent() {
   const { user, role, loading: userLoading } = useUser()
   const { showToast } = useToast()
   const router = useRouter()
@@ -329,6 +329,14 @@ export default function PipelinePage() {
         onCustomerUpdate={() => {}}
       />
     </DashboardLayout>
+  )
+}
+
+export default function PipelinePage() {
+  return (
+    <React.Suspense fallback={null}>
+      <PipelinePageContent />
+    </React.Suspense>
   )
 }
 

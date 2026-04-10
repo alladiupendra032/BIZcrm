@@ -24,7 +24,7 @@ import { Deal } from '@/components/pipeline/DealCard'
 
 type ActiveTab = 'tasks' | 'team'
 
-export default function TasksPage() {
+function TasksPageContent() {
   const { user, role, loading: userLoading } = useUser()
   const { showToast } = useToast()
   const router = useRouter()
@@ -343,5 +343,13 @@ export default function TasksPage() {
         }}
       />
     </DashboardLayout>
+  )
+}
+
+export default function TasksPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <TasksPageContent />
+    </React.Suspense>
   )
 }
