@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       orgName,
     })
     
+    // @ts-expect-error - Ignore missing types for nodemailer to unblock build
     const nodemailer = await import('nodemailer')
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
