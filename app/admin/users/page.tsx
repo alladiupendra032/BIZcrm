@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Users, UserPlus, Shield } from 'lucide-react'
+import { Users, UserPlus, Shield, Zap } from 'lucide-react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { UserTable } from '@/components/admin/UserTable'
 import { InviteUserModal } from '@/components/admin/InviteUserModal'
@@ -29,7 +29,7 @@ export default function AdminUsersPage() {
               <h1 className="text-3xl font-extrabold text-white tracking-tight">User Management</h1>
             </div>
             <p className="text-slate-400 text-sm max-w-lg leading-relaxed">
-              Maintain your organization's hierarchy and security by managing team access, roles, and system permissions.
+              Maintain your organization&apos;s hierarchy and security by managing team access, roles, and system permissions.
             </p>
           </div>
           <Button
@@ -113,6 +113,7 @@ export default function AdminUsersPage() {
           setIsInviteOpen(false)
         }}
       />
+    </DashboardLayout>
   )
 }
 
