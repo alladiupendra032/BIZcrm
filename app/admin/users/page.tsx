@@ -1,23 +1,25 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
 import { Users, UserPlus, Shield, Zap } from 'lucide-react'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { UserTable } from '@/components/admin/UserTable'
-import { InviteUserModal } from '@/components/admin/InviteUserModal'
-import { Button } from '@/components/ui/Button'
+// Using absolute relative paths to bypass potential alias issues during production build
+import { DashboardLayout } from '../../../components/layout/DashboardLayout'
+import { UserTable } from '../../../components/admin/UserTable'
+import { InviteUserModal } from '../../../components/admin/InviteUserModal'
+import { Button } from '../../../components/ui/Button'
 
 /**
  * AdminUsersPage provides the interface for managing organization members.
+ * Using a simplified const export pattern to ensure maximum compatibility with the SWC parser.
  */
-export default function AdminUsersPage() {
-  const [isInviteOpen, setIsInviteOpen] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
+const AdminUsersPage = () => {
+  const [isInviteOpen, setIsInviteOpen] = React.useState(false);
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   const handleUserRefresh = () => {
-    setRefreshKey(prev => prev + 1)
-  }
+    setRefreshKey((prev) => prev + 1);
+  };
 
   return (
     <DashboardLayout>
@@ -121,8 +123,10 @@ export default function AdminUsersPage() {
         }}
       />
     </DashboardLayout>
-  )
-}
+  );
+};
+
+export default AdminUsersPage;
 
 function StatCard({ icon, label, value, sub }: { icon: React.ReactNode, label: string, value: string, sub: string }) {
   return (
