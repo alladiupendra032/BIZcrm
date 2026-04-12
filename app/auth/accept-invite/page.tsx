@@ -322,7 +322,7 @@ export default function AcceptInvitePage() {
                   </motion.div>
 
                   <h1 className="text-2xl font-bold text-white mb-2">
-                    You're in, {userName}! 🎉
+                    You&apos;re in, {userName}! 🎉
                   </h1>
                   <p className="text-slate-400 text-sm leading-relaxed mb-6">
                     Your account is active. Redirecting to your dashboard…

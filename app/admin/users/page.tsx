@@ -38,7 +38,7 @@ const AdminUsersPage = () => {
               <h1 className="text-3xl font-extrabold text-white tracking-tight">User Management</h1>
             </div>
             <p className="text-slate-400 text-sm max-w-lg leading-relaxed">
-              Maintain your organization's hierarchy and security by managing team access, roles, and system permissions.
+              Maintain your organization&apos;s hierarchy and security by managing team access, roles, and system permissions.
             </p>
           </div>
           <Button
