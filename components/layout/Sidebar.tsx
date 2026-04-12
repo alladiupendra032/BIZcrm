@@ -12,11 +12,11 @@ import { supabase } from '@/lib/supabaseClient'
 import { useUser } from '@/lib/UserContext'
 
 const mainNavItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/customers',  icon: Users,          label: 'Customers' },
-  { href: '/pipeline',   icon: Kanban,         label: 'Pipeline' },
-  { href: '/tasks',      icon: CheckSquare,    label: 'Tasks' },
-  { href: '/settings',   icon: Settings,       label: 'Settings' },
+  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard',  roles: ['Admin', 'Manager', 'Team Member'] },
+  { href: '/customers',  icon: Users,          label: 'Customers',  roles: ['Admin', 'Manager', 'Team Member'] },
+  { href: '/pipeline',   icon: Kanban,         label: 'Pipeline',   roles: ['Admin', 'Manager'] },
+  { href: '/tasks',      icon: CheckSquare,    label: 'Tasks',      roles: ['Admin', 'Manager', 'Team Member'] },
+  { href: '/settings',   icon: Settings,       label: 'Settings',   roles: ['Admin', 'Manager', 'Team Member'] },
 ]
 
 const adminNavItems = [
@@ -108,7 +108,9 @@ export function Sidebar() {
 
       {/* Main Nav */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {mainNavItems.map(item => (
+        {mainNavItems
+          .filter(item => !item.roles || item.roles.includes(role as string))
+          .map(item => (
           <NavItem
             key={item.href}
             {...item}

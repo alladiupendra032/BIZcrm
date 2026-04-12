@@ -203,7 +203,32 @@ function PipelinePageContent() {
   if (closeDateFrom) exportParams.closeDateFrom = closeDateFrom
   if (closeDateTo) exportParams.closeDateTo = closeDateTo
 
-  if (role === 'Team Member') return null
+  if (userLoading) return null
+
+  if (role === 'Team Member') {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center px-6">
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-6"
+            style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)' }}>
+            <KanbanSquare className="w-10 h-10 text-indigo-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Pipeline Access Restricted</h2>
+          <p className="text-slate-400 text-sm max-w-sm leading-relaxed mb-6">
+            The sales pipeline is available to Admins and Managers only.<br />
+            Contact your Admin if you need access.
+          </p>
+          <button
+            onClick={() => router.push('/tasks')}
+            className="px-6 py-2.5 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)' }}
+          >
+            Go to My Tasks
+          </button>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>

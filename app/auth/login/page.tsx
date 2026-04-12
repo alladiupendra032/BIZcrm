@@ -58,9 +58,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex overflow-hidden">
-      {/* ── Left Side: Animated Visual ── */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center">
+    <div className="min-h-screen flex flex-col-reverse lg:flex-row overflow-hidden">
+      {/* ── Left Side / Bottom on Mobile: Branding Visual ── */}
+      <div className="flex lg:w-1/2 relative overflow-hidden items-center justify-center py-12 lg:py-0">
         {/* Animated gradient blobs */}
         <div className="absolute inset-0">
           <motion.div
