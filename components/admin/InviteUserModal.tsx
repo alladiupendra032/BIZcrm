@@ -145,14 +145,14 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
                   </div>
                 </form>
 
-                {/* Resend Verification Notice (Explain why users might not get mail) */}
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Resend Security Note</span>
+                {/* Email Delivery Notice */}
+                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-2">
+                  <div className="flex items-center gap-2 text-blue-400">
+                    <Clock className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Email Delivery Note</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                    <span className="text-amber-200/80">Are users not receiving emails?</span> By default, Resend only sends to your own address. To invite others, you must verify your domain or use Hostinger SMTP.
+                    Invites are sent via <span className="text-blue-300">SMTP</span> if configured, or <span className="text-blue-300">Supabase Auth</span> as a fallback. If users aren't receiving emails, check your SMTP credentials or Supabase rate limits.
                   </p>
                 </div>
 
