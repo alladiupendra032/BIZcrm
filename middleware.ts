@@ -15,34 +15,48 @@ export async function middleware(req: NextRequest) {
     return res
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return res
-  }
+  if (!supabaseUrl || !supabaseAnonKey) return res
 
-  // Use auth-helpers middleware client — correctly reads & refreshes session cookies
   const supabase = createMiddlewareClient({ req, res })
   const { data: { session } } = await supabase.auth.getSession()
 
-  const isAuthPage        = pathname.startsWith('/auth')
-  // Accept-invite must NEVER be redirected — it handles its own token exchange
-  const isAcceptInvite    = pathname.startsWith('/auth/accept-invite')
+  const isAuthPage     = pathname.startsWith('/auth')
+  const isAcceptInvite = pathname.startsWith('/auth/accept-invite')
+  const isAdminRoute   = pathname.startsWith('/admin')
+  const isApiRoute     = pathname.startsWith('/api')
 
-  // Always allow the accept-invite page through regardless of session state
-  if (isAcceptInvite) {
-    return res
-  }
+  // ── Always let accept-invite through — it handles its own token exchange ──
+  if (isAcceptInvite) return res
 
-  // Authenticated user → redirect away from other auth pages (login, signup)
+  // ── API routes: handled server-side — let them through ──────────────────
+  if (isApiRoute) return res
+
+  // ── Authenticated user trying to visit login/signup → send to dashboard ──
   if (session && isAuthPage) {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  // Unauthenticated user → redirect to login for protected pages
+  // ── Unauthenticated user → redirect to login ─────────────────────────────
   if (!session && !isAuthPage) {
     return NextResponse.redirect(new URL('/auth/login', req.url))
+  }
+
+  // ── Role-based protection for /admin/* routes ─────────────────────────────
+  if (session && isAdminRoute) {
+    // Fetch the user's role from the users table
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    if (!profile || profile.role !== 'Admin') {
+      // Non-admin tries to access /admin — redirect to their dashboard
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
   }
 
   return res
@@ -53,4 +67,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-

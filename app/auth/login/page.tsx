@@ -23,18 +23,33 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (signInError) {
-        // Show the actual Supabase error message
         setError(signInError.message)
         return
       }
 
-      router.push('/dashboard')
+      // Fetch user's role to determine redirect target
+      let redirectTo = '/dashboard'
+      if (signInData?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', signInData.user.id)
+          .single()
+
+        if (profile?.role) {
+          // All roles land on /dashboard — the Dashboard component adapts per role.
+          // Role-specific pages are accessible from the sidebar.
+          redirectTo = '/dashboard'
+        }
+      }
+
+      router.push(redirectTo)
     } catch (err: any) {
       setError(err?.message || 'An unexpected error occurred. Please try again.')
     } finally {
