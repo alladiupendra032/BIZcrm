@@ -30,16 +30,24 @@ const AdminUsersPage = () => {
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .select('id, role, created_at')
         .eq('organization_id', currentUser.organization_id)
+
+      if (error) {
+        console.error('[UserStats] fetch error:', error.message)
+        return
+      }
 
       if (data) {
         setStats({
           total:       data.length,
           admins:      data.filter(u => u.role === 'Admin').length,
-          recentJoins: data.filter(u => new Date(u.created_at) >= thirtyDaysAgo).length,
+          recentJoins: data.filter(u => {
+            if (!u.created_at) return false
+            return new Date(u.created_at) >= thirtyDaysAgo
+          }).length,
         })
       }
     } finally {
