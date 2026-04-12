@@ -1,62 +1,70 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, AlertCircle, ArrowRight, Mail } from 'lucide-react'
+import { CheckCircle, AlertCircle, ArrowRight, Lock, Eye, EyeOff, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
-type State = 'verifying' | 'success' | 'error'
+type Stage =
+  | 'verifying'        // Exchanging the OTP token from the URL
+  | 'set-password'     // New user — needs to choose a password
+  | 'saving'           // Writing org/role to DB after password is set
+  | 'success'          // Done — redirecting to dashboard
+  | 'error'            // Something went wrong
 
 export default function AcceptInvitePage() {
   const router = useRouter()
-  const [state, setState] = useState<State>('verifying')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [userName, setUserName] = useState('')
 
+  const [stage,      setStage]      = useState<Stage>('verifying')
+  const [errorMsg,   setErrorMsg]   = useState('')
+  const [userName,   setUserName]   = useState('')
+  const [password,   setPassword]   = useState('')
+  const [showPass,   setShowPass]   = useState(false)
+  const [passError,  setPassError]  = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  // ── Step 1: exchange the token from the URL hash / query params ──────────
   useEffect(() => {
     /**
-     * When the user clicks the invite link, Supabase appends:
-     *   ?token=xxx&type=invite
-     * The auth-helpers client automatically exchanges this token when
-     * onAuthStateChange fires — we just need to listen for it.
+     * Supabase invite links look like:
+     *   https://…/auth/accept-invite#access_token=xxx&type=invite
+     *   OR  …?token=xxx&type=invite       (older format)
      *
-     * Alternatively, the URL may contain #access_token= (PKCE flow).
-     * supabase.auth handles both cases transparently via onAuthStateChange.
+     * `onAuthStateChange` fires automatically when the auth-helpers page
+     * client detects those params in the URL.
      */
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' && session) {
-          // Token exchange succeeded — user is now logged in
-          const name = session.user.user_metadata?.full_name
-                    || session.user.email?.split('@')[0]
-                    || 'there'
+          // The invite token has been exchanged successfully.
+          // Supabase has signed the user in; now we need them to set a password
+          // (because invite links generate a temporary one-time token, not a password).
+          const name =
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split('@')[0] ||
+            'there'
           setUserName(name)
-          setState('success')
-
-          // Redirect to dashboard after 2.5 seconds
-          setTimeout(() => {
-            router.replace('/dashboard')
-          }, 2500)
+          setStage('set-password')
         }
 
-        if (event === 'PASSWORD_RECOVERY' || event === 'TOKEN_REFRESHED') {
-          // Could happen if user already logged in — just redirect
-          router.replace('/dashboard')
+        if (event === 'PASSWORD_RECOVERY') {
+          // Edge case when user follows a recovery link on this page
+          router.replace('/auth/login')
         }
       }
     )
 
-    // Safety timeout: if nothing fires in 8 seconds, likely an expired/invalid link
+    // Safety net — if Supabase never fires an event within 9 s, declare error
     const timeout = setTimeout(() => {
-      setState(prev => {
+      setStage(prev => {
         if (prev === 'verifying') {
-          setErrorMsg('Your invite link may have expired or already been used.')
+          setErrorMsg('Your invite link may have expired or already been used. Please ask an Admin to resend the invitation.')
           return 'error'
         }
         return prev
       })
-    }, 8000)
+    }, 9000)
 
     return () => {
       subscription.unsubscribe()
@@ -64,12 +72,62 @@ export default function AcceptInvitePage() {
     }
   }, [router])
 
+  // ── Step 2: user submits their chosen password ───────────────────────────
+  const handleSetPassword = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPassError('')
+
+    if (password.length < 8) {
+      setPassError('Password must be at least 8 characters.')
+      return
+    }
+
+    setSubmitting(true)
+    setStage('saving')
+
+    try {
+      // 2a. Update the user's password in Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({ password })
+      if (updateError) throw updateError
+
+      // 2b. Fetch the session to get user metadata (role, org_id)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Session lost after password update.')
+
+      const meta = session.user.user_metadata as Record<string, any>
+      const orgId    = meta?.organization_id  as string | undefined
+      const dbRole   = meta?.invited_role      as string | undefined
+
+      // 2c. If the invite metadata has org + role, write it to the users table
+      if (orgId && dbRole) {
+        await supabase.from('users').upsert({
+          id:              session.user.id,
+          email:           session.user.email,
+          name:            meta?.full_name || session.user.email?.split('@')[0],
+          role:            dbRole,
+          organization_id: orgId,
+        }, { onConflict: 'id' })
+      }
+
+      setStage('success')
+
+      // Redirect to dashboard after 2.5 s
+      setTimeout(() => router.replace('/dashboard'), 2500)
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to set up your account. Please try again.')
+      setStage('error')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [password, router])
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4"
       style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.15) 0%, #060810 60%)' }}
     >
-      {/* Background blobs */}
+      {/* Ambient blobs */}
       <motion.div
         className="fixed top-1/4 left-1/4 w-96 h-96 rounded-full pointer-events-none"
         animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
@@ -97,10 +155,10 @@ export default function AcceptInvitePage() {
             boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)',
           }}
         >
-          {/* Gradient top bar */}
+          {/* Top gradient bar */}
           <div style={{ height: '4px', background: 'linear-gradient(90deg,#3b82f6,#6366f1,#8b5cf6)' }} />
 
-          {/* Logo header */}
+          {/* Logo */}
           <div className="px-8 pt-8 pb-6 border-b border-white/8">
             <div className="flex items-center gap-3">
               <div
@@ -113,12 +171,11 @@ export default function AcceptInvitePage() {
             </div>
           </div>
 
-          {/* Content */}
           <div className="px-8 py-10">
             <AnimatePresence mode="wait">
 
-              {/* ── Verifying state ── */}
-              {state === 'verifying' && (
+              {/* ── VERIFYING ─────────────────────────────────────────── */}
+              {stage === 'verifying' && (
                 <motion.div
                   key="verifying"
                   initial={{ opacity: 0, y: 10 }}
@@ -135,12 +192,10 @@ export default function AcceptInvitePage() {
                       </div>
                     </div>
                   </div>
-                  <h1 className="text-2xl font-bold text-white mb-2">Setting up your account…</h1>
+                  <h1 className="text-2xl font-bold text-white mb-2">Verifying your invite…</h1>
                   <p className="text-slate-400 text-sm leading-relaxed">
-                    We&apos;re verifying your invite link.<br />This will only take a moment.
+                    Hang tight, we are setting up your access.
                   </p>
-
-                  {/* Animated dots */}
                   <div className="flex justify-center gap-1.5 mt-6">
                     {[0, 1, 2].map(i => (
                       <motion.div
@@ -154,8 +209,97 @@ export default function AcceptInvitePage() {
                 </motion.div>
               )}
 
-              {/* ── Success state ── */}
-              {state === 'success' && (
+              {/* ── SET PASSWORD ───────────────────────────────────────── */}
+              {stage === 'set-password' && (
+                <motion.div
+                  key="set-password"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-white mb-1">
+                      Welcome, {userName}! 👋
+                    </h1>
+                    <p className="text-slate-400 text-sm leading-relaxed">
+                      Create a secure password to activate your BizCRM account.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSetPassword} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                        New Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                        <input
+                          type={showPass ? 'text' : 'password'}
+                          value={password}
+                          onChange={e => { setPassword(e.target.value); setPassError('') }}
+                          placeholder="Min. 8 characters"
+                          autoComplete="new-password"
+                          className="w-full pl-10 pr-12 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+                          required
+                          minLength={8}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPass(s => !s)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                          aria-label={showPass ? 'Hide password' : 'Show password'}
+                        >
+                          {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {passError && (
+                        <p className="text-xs text-rose-400 mt-1.5">{passError}</p>
+                      )}
+                    </div>
+
+                    {/* Password strength hint */}
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                      <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
+                      <p className="text-[11px] text-blue-300 leading-relaxed">
+                        Use at least 8 characters with a mix of letters and numbers.
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submitting || password.length < 8}
+                      className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', boxShadow: '0 0 20px rgba(99,102,241,0.3)' }}
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Activate My Account
+                    </button>
+                  </form>
+                </motion.div>
+              )}
+
+              {/* ── SAVING ────────────────────────────────────────────── */}
+              {stage === 'saving' && (
+                <motion.div
+                  key="saving"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="text-center"
+                >
+                  <div className="flex justify-center mb-6">
+                    <div className="relative w-16 h-16">
+                      <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20" />
+                      <div className="absolute inset-0 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                    </div>
+                  </div>
+                  <h1 className="text-xl font-bold text-white mb-2">Setting up your workspace…</h1>
+                  <p className="text-slate-400 text-sm">Almost there!</p>
+                </motion.div>
+              )}
+
+              {/* ── SUCCESS ───────────────────────────────────────────── */}
+              {stage === 'success' && (
                 <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -178,11 +322,10 @@ export default function AcceptInvitePage() {
                   </motion.div>
 
                   <h1 className="text-2xl font-bold text-white mb-2">
-                    Welcome, {userName}! 🎉
+                    You're in, {userName}! 🎉
                   </h1>
                   <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                    Your account has been verified successfully.<br />
-                    Taking you to your dashboard…
+                    Your account is active. Redirecting to your dashboard…
                   </p>
 
                   <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm font-medium">
@@ -190,7 +333,6 @@ export default function AcceptInvitePage() {
                     Redirecting to Dashboard
                   </div>
 
-                  {/* Progress bar */}
                   <div className="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
                     <motion.div
                       className="h-full rounded-full"
@@ -203,8 +345,8 @@ export default function AcceptInvitePage() {
                 </motion.div>
               )}
 
-              {/* ── Error state ── */}
-              {state === 'error' && (
+              {/* ── ERROR ─────────────────────────────────────────────── */}
+              {stage === 'error' && (
                 <motion.div
                   key="error"
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -231,15 +373,14 @@ export default function AcceptInvitePage() {
                     {errorMsg || 'This invite link may have expired or already been used.'}
                   </p>
 
-                  {/* Info box */}
                   <div
                     className="text-left p-4 rounded-xl mb-6 text-sm text-slate-400"
                     style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                   >
                     <p className="font-semibold text-white mb-2">What to do next:</p>
-                    <ul className="space-y-1.5 list-none">
-                      <li>• Ask your admin to resend the invite</li>
-                      <li>• Make sure you clicked the link in the latest email</li>
+                    <ul className="space-y-1.5">
+                      <li>• Ask your Admin to resend the invite</li>
+                      <li>• Make sure you clicked the link in the <strong className="text-slate-300">latest</strong> email</li>
                       <li>• Invite links expire after <strong className="text-slate-300">24 hours</strong></li>
                     </ul>
                   </div>
