@@ -8,9 +8,16 @@ import { UserTable } from '@/components/admin/UserTable'
 import { InviteUserModal } from '@/components/admin/InviteUserModal'
 import { Button } from '@/components/ui/Button'
 
+/**
+ * AdminUsersPage provides the interface for managing organization members.
+ */
 export default function AdminUsersPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+
+  const handleUserRefresh = () => {
+    setRefreshKey(prev => prev + 1)
+  }
 
   return (
     <DashboardLayout>
@@ -29,7 +36,7 @@ export default function AdminUsersPage() {
               <h1 className="text-3xl font-extrabold text-white tracking-tight">User Management</h1>
             </div>
             <p className="text-slate-400 text-sm max-w-lg leading-relaxed">
-              Maintain your organization&apos;s hierarchy and security by managing team access, roles, and system permissions.
+              Maintain your organization's hierarchy and security by managing team access, roles, and system permissions.
             </p>
           </div>
           <Button
@@ -68,7 +75,7 @@ export default function AdminUsersPage() {
           >
             <UserTable
               key={refreshKey}
-              onUsersChange={() => setRefreshKey(k => k + 1)}
+              onUsersChange={handleUserRefresh}
             />
           </motion.div>
         </div>
@@ -109,7 +116,7 @@ export default function AdminUsersPage() {
         isOpen={isInviteOpen}
         onClose={() => setIsInviteOpen(false)}
         onSuccess={() => {
-          setRefreshKey(k => k + 1)
+          handleUserRefresh()
           setIsInviteOpen(false)
         }}
       />
@@ -121,7 +128,7 @@ function StatCard({ icon, label, value, sub }: { icon: React.ReactNode, label: s
   return (
     <div className="glass-panel p-5 border border-white/5 rounded-3xl relative overflow-hidden group">
       <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
-        {React.cloneElement(icon as React.ReactElement, { size: 40 })}
+        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { size: 40 }) : null}
       </div>
       <div className="flex items-center gap-3 mb-3">
         <div className="p-2 rounded-xl bg-white/5 border border-white/10">{icon}</div>
