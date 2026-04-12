@@ -7,11 +7,11 @@ import { CheckCircle, AlertCircle, ArrowRight, Lock, Eye, EyeOff, Mail } from 'l
 import { supabase } from '@/lib/supabaseClient'
 
 type Stage =
-  | 'verifying'        // Exchanging the OTP token from the URL
-  | 'set-password'     // New user — needs to choose a password
-  | 'saving'           // Writing org/role to DB after password is set
-  | 'success'          // Done — redirecting to dashboard
-  | 'error'            // Something went wrong
+  | 'verifying'     // Exchanging tokens from URL
+  | 'set-password'  // Token OK — user must set a password
+  | 'saving'        // Writing org/role to DB
+  | 'success'       // Done — redirecting
+  | 'error'         // Something went wrong
 
 export default function AcceptInvitePage() {
   const router = useRouter()
@@ -24,55 +24,107 @@ export default function AcceptInvitePage() {
   const [passError,  setPassError]  = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // ── Step 1: exchange the token from the URL hash / query params ──────────
+  // ── Helper: handle a valid session after token exchange ──────────────────
+  const handleSession = useCallback((session: any) => {
+    const meta = session.user?.user_metadata as Record<string, any> ?? {}
+    const name  = meta?.full_name || session.user?.email?.split('@')[0] || 'there'
+    setUserName(name)
+    setStage('set-password')
+  }, [])
+
+  // ── Step 1: Exchange the invite token from the URL ────────────────────────
   useEffect(() => {
-    /**
-     * Supabase invite links look like:
-     *   https://…/auth/accept-invite#access_token=xxx&type=invite
-     *   OR  …?token=xxx&type=invite       (older format)
-     *
-     * `onAuthStateChange` fires automatically when the auth-helpers page
-     * client detects those params in the URL.
-     */
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          // The invite token has been exchanged successfully.
-          // Supabase has signed the user in; now we need them to set a password
-          // (because invite links generate a temporary one-time token, not a password).
-          const name =
-            session.user.user_metadata?.full_name ||
-            session.user.email?.split('@')[0] ||
-            'there'
-          setUserName(name)
-          setStage('set-password')
+    let cancelled = false
+
+    const init = async () => {
+      try {
+        // --- PATH A: Check if Supabase already has a session (auto-detected hash) ---
+        const { data: { session: existingSession } } = await supabase.auth.getSession()
+        if (existingSession && !cancelled) {
+          handleSession(existingSession)
+          return
         }
 
-        if (event === 'PASSWORD_RECOVERY') {
-          // Edge case when user follows a recovery link on this page
-          router.replace('/auth/login')
+        // --- PATH B: URL hash contains #access_token=... (Supabase redirect) ---
+        if (typeof window !== 'undefined') {
+          const hash = window.location.hash
+          if (hash && hash.includes('access_token')) {
+            const hashParams = new URLSearchParams(hash.substring(1))
+            const accessToken  = hashParams.get('access_token')
+            const refreshToken = hashParams.get('refresh_token')
+            if (accessToken && refreshToken) {
+              const { data, error } = await supabase.auth.setSession({
+                access_token:  accessToken,
+                refresh_token: refreshToken,
+              })
+              if (!error && data.session && !cancelled) {
+                handleSession(data.session)
+                return
+              }
+            }
+          }
+
+          // --- PATH C: URL query contains ?token_hash=...&type=... (OTP flow) ---
+          const sp         = new URLSearchParams(window.location.search)
+          const tokenHash  = sp.get('token_hash') || sp.get('token')
+          const type       = sp.get('type')
+
+          if (tokenHash) {
+            const { data, error } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: (type as any) || 'email',
+            })
+            if (!error && data.session && !cancelled) {
+              handleSession(data.session)
+              return
+            }
+          }
+
+          // --- PATH D: PKCE code exchange (?code=...) ---
+          const code = sp.get('code')
+          if (code) {
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+            if (!error && data.session && !cancelled) {
+              handleSession(data.session)
+              return
+            }
+          }
+        }
+
+        // --- PATH E: Fall back to onAuthStateChange (Supabase fires this asynchronously) ---
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session && !cancelled) {
+            subscription.unsubscribe()
+            handleSession(session)
+          }
+        })
+
+        // Safety net — if nothing fires within 12 s, show error
+        const timeout = setTimeout(() => {
+          if (!cancelled) {
+            setErrorMsg('Your invite link may have expired or already been used. Please ask an Admin to resend the invitation.')
+            setStage('error')
+          }
+        }, 12000)
+
+        return () => {
+          cancelled = true
+          subscription.unsubscribe()
+          clearTimeout(timeout)
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setErrorMsg(err.message || 'An unexpected error occurred.')
+          setStage('error')
         }
       }
-    )
-
-    // Safety net — if Supabase never fires an event within 9 s, declare error
-    const timeout = setTimeout(() => {
-      setStage(prev => {
-        if (prev === 'verifying') {
-          setErrorMsg('Your invite link may have expired or already been used. Please ask an Admin to resend the invitation.')
-          return 'error'
-        }
-        return prev
-      })
-    }, 9000)
-
-    return () => {
-      subscription.unsubscribe()
-      clearTimeout(timeout)
     }
-  }, [router])
 
-  // ── Step 2: user submits their chosen password ───────────────────────────
+    init()
+    return () => { cancelled = true }
+  }, [handleSession])
+
+  // ── Step 2: User sets their password ─────────────────────────────────────
   const handleSetPassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setPassError('')
@@ -86,19 +138,19 @@ export default function AcceptInvitePage() {
     setStage('saving')
 
     try {
-      // 2a. Update the user's password in Supabase Auth
+      // 2a. Update password in Supabase Auth
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
 
-      // 2b. Fetch the session to get user metadata (role, org_id)
+      // 2b. Fetch session metadata
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Session lost after password update.')
 
-      const meta = session.user.user_metadata as Record<string, any>
-      const orgId    = meta?.organization_id  as string | undefined
-      const dbRole   = meta?.invited_role      as string | undefined
+      const meta   = session.user.user_metadata as Record<string, any>
+      const orgId  = meta?.organization_id as string | undefined
+      const dbRole = meta?.invited_role    as string | undefined
 
-      // 2c. If the invite metadata has org + role, write it to the users table
+      // 2c. Write profile to public.users
       if (orgId && dbRole) {
         await supabase.from('users').upsert({
           id:              session.user.id,
@@ -110,8 +162,6 @@ export default function AcceptInvitePage() {
       }
 
       setStage('success')
-
-      // Redirect to dashboard after 2.5 s
       setTimeout(() => router.replace('/dashboard'), 2500)
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to set up your account. Please try again.')
@@ -121,7 +171,7 @@ export default function AcceptInvitePage() {
     }
   }, [password, router])
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── UI ────────────────────────────────────────────────────────────────────
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4"
@@ -174,15 +224,9 @@ export default function AcceptInvitePage() {
           <div className="px-8 py-10">
             <AnimatePresence mode="wait">
 
-              {/* ── VERIFYING ─────────────────────────────────────────── */}
+              {/* ── VERIFYING ─────────────────────────────── */}
               {stage === 'verifying' && (
-                <motion.div
-                  key="verifying"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-center"
-                >
+                <motion.div key="verifying" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-center">
                   <div className="flex justify-center mb-6">
                     <div className="relative w-16 h-16">
                       <div className="absolute inset-0 rounded-full border-2 border-blue-500/20" />
@@ -193,14 +237,10 @@ export default function AcceptInvitePage() {
                     </div>
                   </div>
                   <h1 className="text-2xl font-bold text-white mb-2">Verifying your invite…</h1>
-                  <p className="text-slate-400 text-sm leading-relaxed">
-                    Hang tight, we are setting up your access.
-                  </p>
+                  <p className="text-slate-400 text-sm leading-relaxed">Hang tight, we are setting up your access.</p>
                   <div className="flex justify-center gap-1.5 mt-6">
                     {[0, 1, 2].map(i => (
-                      <motion.div
-                        key={i}
-                        className="w-1.5 h-1.5 rounded-full bg-blue-500"
+                      <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-500"
                         animate={{ opacity: [0.3, 1, 0.3] }}
                         transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
                       />
@@ -209,28 +249,17 @@ export default function AcceptInvitePage() {
                 </motion.div>
               )}
 
-              {/* ── SET PASSWORD ───────────────────────────────────────── */}
+              {/* ── SET PASSWORD ───────────────────────────── */}
               {stage === 'set-password' && (
-                <motion.div
-                  key="set-password"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                >
+                <motion.div key="set-password" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                   <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-white mb-1">
-                      Welcome, {userName}! 👋
-                    </h1>
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                      Create a secure password to activate your BizCRM account.
-                    </p>
+                    <h1 className="text-2xl font-bold text-white mb-1">Welcome, {userName}! 👋</h1>
+                    <p className="text-slate-400 text-sm leading-relaxed">Create a secure password to activate your BizCRM account.</p>
                   </div>
 
                   <form onSubmit={handleSetPassword} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                        New Password
-                      </label>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">New Password</label>
                       <div className="relative">
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                         <input
@@ -242,27 +271,21 @@ export default function AcceptInvitePage() {
                           className="w-full pl-10 pr-12 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
                           required
                           minLength={8}
+                          autoFocus
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowPass(s => !s)}
+                        <button type="button" onClick={() => setShowPass(s => !s)}
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
                           aria-label={showPass ? 'Hide password' : 'Show password'}
                         >
                           {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
-                      {passError && (
-                        <p className="text-xs text-rose-400 mt-1.5">{passError}</p>
-                      )}
+                      {passError && <p className="text-xs text-rose-400 mt-1.5">{passError}</p>}
                     </div>
 
-                    {/* Password strength hint */}
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
                       <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
-                      <p className="text-[11px] text-blue-300 leading-relaxed">
-                        Use at least 8 characters with a mix of letters and numbers.
-                      </p>
+                      <p className="text-[11px] text-blue-300 leading-relaxed">Use at least 8 characters with a mix of letters and numbers.</p>
                     </div>
 
                     <button
@@ -278,15 +301,9 @@ export default function AcceptInvitePage() {
                 </motion.div>
               )}
 
-              {/* ── SAVING ────────────────────────────────────────────── */}
+              {/* ── SAVING ────────────────────────────────── */}
               {stage === 'saving' && (
-                <motion.div
-                  key="saving"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-center"
-                >
+                <motion.div key="saving" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-center">
                   <div className="flex justify-center mb-6">
                     <div className="relative w-16 h-16">
                       <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20" />
@@ -298,85 +315,49 @@ export default function AcceptInvitePage() {
                 </motion.div>
               )}
 
-              {/* ── SUCCESS ───────────────────────────────────────────── */}
+              {/* ── SUCCESS ───────────────────────────────── */}
               {stage === 'success' && (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="text-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className="flex justify-center mb-6"
+                <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="text-center">
+                  <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }} className="flex justify-center mb-6"
                   >
-                    <div
-                      className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                      style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}
-                    >
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                      style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
                       <CheckCircle className="w-8 h-8 text-emerald-400" />
                     </div>
                   </motion.div>
-
-                  <h1 className="text-2xl font-bold text-white mb-2">
-                    You&apos;re in, {userName}! 🎉
-                  </h1>
-                  <p className="text-slate-400 text-sm leading-relaxed mb-6">
-                    Your account is active. Redirecting to your dashboard…
-                  </p>
-
+                  <h1 className="text-2xl font-bold text-white mb-2">You&apos;re in, {userName}! 🎉</h1>
+                  <p className="text-slate-400 text-sm leading-relaxed mb-6">Your account is active. Redirecting to your dashboard…</p>
                   <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm font-medium">
-                    <ArrowRight className="w-4 h-4 animate-pulse" />
-                    Redirecting to Dashboard
+                    <ArrowRight className="w-4 h-4 animate-pulse" /> Redirecting to Dashboard
                   </div>
-
                   <div className="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full rounded-full"
+                    <motion.div className="h-full rounded-full"
                       style={{ background: 'linear-gradient(90deg,#3b82f6,#6366f1)' }}
-                      initial={{ width: '0%' }}
-                      animate={{ width: '100%' }}
+                      initial={{ width: '0%' }} animate={{ width: '100%' }}
                       transition={{ duration: 2.5, ease: 'linear' }}
                     />
                   </div>
                 </motion.div>
               )}
 
-              {/* ── ERROR ─────────────────────────────────────────────── */}
+              {/* ── ERROR ─────────────────────────────────── */}
               {stage === 'error' && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="text-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                    className="flex justify-center mb-6"
+                <motion.div key="error" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="text-center">
+                  <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }} className="flex justify-center mb-6"
                   >
-                    <div
-                      className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}
-                    >
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)' }}>
                       <AlertCircle className="w-8 h-8 text-rose-400" />
                     </div>
                   </motion.div>
-
                   <h1 className="text-2xl font-bold text-white mb-2">Invite Link Issue</h1>
                   <p className="text-slate-400 text-sm leading-relaxed mb-6">
                     {errorMsg || 'This invite link may have expired or already been used.'}
                   </p>
-
-                  <div
-                    className="text-left p-4 rounded-xl mb-6 text-sm text-slate-400"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-                  >
+                  <div className="text-left p-4 rounded-xl mb-6 text-sm text-slate-400"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <p className="font-semibold text-white mb-2">What to do next:</p>
                     <ul className="space-y-1.5">
                       <li>• Ask your Admin to resend the invite</li>
@@ -384,7 +365,6 @@ export default function AcceptInvitePage() {
                       <li>• Invite links expire after <strong className="text-slate-300">24 hours</strong></li>
                     </ul>
                   </div>
-
                   <button
                     onClick={() => router.push('/auth/login')}
                     className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all hover:opacity-90"

@@ -19,7 +19,7 @@ interface OrgUser {
 
 // DB roles available in the role dropdown
 // 'User' is the friendly label for 'Team Member' — both map to the same DB value
-const ROLES = ['Admin', 'Manager', 'Team Member', 'User'] as const
+const ROLES = ['Admin', 'Manager', 'Team Member'] as const
 
 // Maps display label → actual DB role value saved
 const ROLE_TO_DB: Record<string, string> = {
@@ -122,15 +122,26 @@ export function UserTable({ onUsersChange }: UserTableProps) {
 
     setSaving(userId)
     try {
-      const { error } = await (supabase.from('users') as any)
-        .update({ organization_id: null })
-        .eq('id', userId)
-      if (error) throw error
+      // Use server API with service role key to bypass RLS
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const res = await fetch('/api/admin/remove-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to remove user')
+
       setUsers(prev => prev.filter(u => u.id !== userId))
       showToast('success', 'User removed from organization')
       onUsersChange?.()
     } catch (err: any) {
-      showToast('error', 'Failed to remove user')
+      showToast('error', err.message || 'Failed to remove user')
     } finally {
       setSaving(null)
       setConfirmDialog(null)
@@ -242,7 +253,8 @@ export function UserTable({ onUsersChange }: UserTableProps) {
                     <button
                       onClick={() => setConfirmDialog({ type: 'remove', userId: u.id, userName: u.name || 'user' })}
                       disabled={saving === u.id}
-                      className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                      className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all"
+                      title="Remove user"
                     >
                       {saving === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                     </button>
