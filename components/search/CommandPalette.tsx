@@ -83,7 +83,15 @@ export function CommandPalette({ isOpen, onClose }: Props) {
           query,
           org_id: user.organization_id,
         })
-        if (!error && data) setResults(data as SearchResults)
+        if (error) {
+          console.error('[CommandPalette] RPC error:', error.message, error)
+          setResults({ customers: [], deals: [], tasks: [] })
+        } else if (data) {
+          setResults(data as SearchResults)
+        }
+      } catch (err) {
+        console.error('[CommandPalette] Unexpected error:', err)
+        setResults({ customers: [], deals: [], tasks: [] })
       } finally {
         setLoading(false)
       }

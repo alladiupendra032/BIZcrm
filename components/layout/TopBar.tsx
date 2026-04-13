@@ -105,7 +105,15 @@ export function TopBar() {
           query: searchQuery,
           org_id: user.organization_id,
         })
-        if (!error && data) setSearchResults(data as SearchResults)
+        if (error) {
+          console.error('[Search] RPC error:', error.message, error)
+          setSearchResults({ customers: [], deals: [], tasks: [] })
+        } else if (data) {
+          setSearchResults(data as SearchResults)
+        }
+      } catch (err) {
+        console.error('[Search] Unexpected error:', err)
+        setSearchResults({ customers: [], deals: [], tasks: [] })
       } finally {
         setSearchLoading(false)
       }
